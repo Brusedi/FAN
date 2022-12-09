@@ -1,0 +1,131 @@
+<!doctype html>
+<html>
+<head>
+    <title>Our Funky HTML Page</title>
+</head>
+<style>
+    .cnt{
+        background-color: black;
+        /* height: 100px; */
+
+    }
+</style>
+
+<body>
+    <script>
+
+        const f1 = (x) => 2 ;
+
+        const f2 = ( (f) => f(f) )( (f) => f(f) ) ;
+
+        const f3i = (n,f) => { console.log(n); return n > 3 ? n : f( n + 1 );   }
+
+        const f3a = ( (f) => (n) =>  f3i(n,f) ) (  (f) => (n) => f3i(n,f) )
+
+        const f3 = ( (f) => (n) => (n > 3 ? n : f( n + 1 )) )   ( (f) => (n) => (n > 3 ? n : f( n + 1 )) )
+
+        //const fa = (f) => f(f)
+        
+        const fn = (f) => (n,t) => n > t ? n : f(f) (n + 1, t)
+
+        const fr = ( (f) => (n,t) => n > t ? n : f(f) (n + 1.1 , t) )( (f) => (n,t) => n > t ? n : f(f) (n + 1, t)  )
+
+        const fnc = (f) => (n,t) => { console.log(n) ; return n > t ? n : f(f) (n + 1, t)}
+
+
+        const fa = (f) => f(f)
+
+        const fr1 = fa( (f) => (n) => n <= 0 ? n : n + f(f) ( n - 1 ) );
+
+        const fr2 = fa( 
+            (f) => {
+                const g = (n) => f(f)(n)
+                return (n) => n <= 0 ? n : n + g( n - 1 ) ;
+            }            
+        )
+
+        const fb = (ff) => fa ( 
+            (f) => {
+                const g = (n) => f(f)(n);
+                return ff(g)
+            }       
+        )    
+            
+        const fb2 = (ff) => fa ( 
+            (f) => ff((n) => f(f)(n))
+        )  
+
+        
+
+        const Y0 = (f) => (g=>g(g))(g=>f(n=>g(g)(n)))  ;
+
+        const y2 = (f) => (g => g(g)) (g => f(x => g(g)(x)))
+
+        const Y2 = (h) => ( f => f(f) ) ( f => h( n => f(f)(n)   ) )  ;
+
+        const y3 = cf => ( h => h(h) ) (  f => ( cf ) ( x => f(f)(x)  ) ) 
+        
+        //  ( h => h(h) ) (  (g) => f( (n) => g(g)(n))  )  
+
+        const fr3 = (g) => (n) => n <= 0 ? n : n + g( n - 1 ) ;
+
+        const fff = Y( (g) => (x) => x==g(x) ? x :g(x+1) ) ;
+
+        const sumTo100 = (n) => n == 100 ? n : n + sumTo100( n + 1 ) ; 
+
+        // Y(F)=F(Y(F)).     
+
+        const Y1 = (f) => f(Y(f));
+        
+        const Y = (f) => (x) => f(Y(f))(x);
+
+        const s100 = (f) => (n) => {  console.log(n); return n == 100 ? n : ( n + f( n + 1 ) ); }; 
+
+        const s10 = (f) => (n) => {  console.log(n); return n == 100 ? n : ( n + f(f)( n + 1 ) ); }; 
+
+        const s1 = f => ( (ff) => (n) => {  console.log(n); return n == 100 ? n : ( n + ff( n + 1 ) ); } )( f(f) ); 
+
+        const it = (x) => {  console.log("call "+ x ); return "2222222" };     
+
+        ///        
+        const itr = n => n >= 100 ? n : ( n + itr( n + 1 ) )  
+
+        const it1 = f => n => n >= 100 ? n : ( n + f( n + 1 ) )  
+
+        const it2 = f => n => n >= 100 ? n : ( n + f(f)( n + 1 ) )  
+
+        const it3 = f => ( g => n => n >= 100 ? n : ( n + g( n + 1 ) ) ) ( (x) => f(f)(x)  ) 
+
+        const mf = x => it3(it3) (x)    
+
+        const it4 =  (  f => ( g => n => n >= 100 ? n : ( n + g( n + 1 ) ) ) ( (x) => f(f)(x)  ) ) (   f => ( g => n => n >= 100 ? n : ( n + g( n + 1 ) ) ) ( (x) => f(f)(x)  )  ) ;
+
+        const it5 =  ( g => g(g) ) (   f => ( g => n => n >= 100 ? n : ( n + g( n + 1 ) ) ) ( (x) => f(f)(x)  ) ) ;
+
+        const sff =  g => n => n >= 100 ? n : ( n + g ( n + 1 ) )
+
+        const it6 = ( h => h(h) ) (  f => ( sff  ) ( x => f(f)(x)  ) ) 
+
+        const it7 = cf => ( h => h(h) ) (  f => ( cf ) ( x => f(f)(x)  ) ) 
+
+        const sum = (f=>((g=>g(g))(g=>f(n=>g(g)(n)))))( f => n => n<=0 ? n : ( n + f( n-1 ) )  )     
+
+
+
+        const Yl0 = f => ( g => f(g(g)) ) ( g  => f(g(g) ) ) 
+        
+        const Yl1 = f => ( h => h(h) ) ( g => f(      g(g)    ) ) 
+        
+        const y31 = f => ( h => h(h) ) ( g => f( x => g(g)(x) ) ) 
+
+
+
+        const rec = (n) => n>5?n:rec;
+        
+        
+
+
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,133 @@
+<!doctype html>
+<html>
+<head>
+    <title>Our Funky HTML Page</title>
+</head>
+<style>
+    .cnt{
+        background-color: black;
+        /* height: 100px; */
+
+    }
+</style>
+
+<body>
+    
+    <div class = "cnt" >
+        <canvas id="testCanvas" width="860" height="260" ></canvas> 
+
+    </div >
+</body>
+</html>
+
+<script>
+    const URI = "https://api.open-meteo.com/v1/forecast?latitude=60.95&longitude=76.50&hourly=temperature_2m&timezone=auto" ;
+    const PROP_HR   = 'hourly';
+    const PROP_TH   = 'temperature_2m';
+    const PROP_TM   = "time";
+    const SCR_W     = 800;
+    const SCR_H     = 200;
+    const SCR_PAD   = 30;
+    const KOEF      = SCR_W/SCR_H ;
+    const TEXT_YOFS = 3;
+    const TEXT_XOFS = 5;
+
+    const AXY_GRADE =  5;
+
+    function httpGet(theUrl)
+    {
+        var xmlHttp = new XMLHttpRequest();
+        xmlHttp.open( "GET", theUrl, false ); // false for synchronous request
+        xmlHttp.send( null );
+        return xmlHttp.responseText;
+    }
+    //const getCurTimeIndex(   )  
+
+    const dataS =  JSON.parse( httpGet(URI))[PROP_HR] ; 
+    const cyrTimesInd = dataS[PROP_TM].reduce( (accumulator, currentValue, currentIndex) =>  new Date( currentValue) <  new Date() ? currentIndex : accumulator , 0 ) ;
+    //console.log( new Date( dataS[PROP_TM][cyrTimesInd]) )
+    const data = dataS[PROP_TH] //.map( x => x + 20)   ;  //.map( x => Math.abs(x)  ) ; 
+    const maxT = Math.max( ...data );
+    const minT = Math.min( ...data );
+    const minY = (Math.floor(minT/5)) * 5 
+    const maxY = (Math.floor(maxT/5)+1) * 5 
+    const cvHght = Math.abs(maxY-minY);
+    const cvWdh  = Math.floor(cvHght * KOEF);
+
+    const toY =  ( y , ycfs, ydfs , yHc, yHd ) =>  (SCR_H + SCR_PAD*2 )  - ( ycfs + (y + ydfs) * (yHc/yHd) )
+    const toX =  ( i , xcfs, xWc, xWd ) => xcfs + i *  (xWc/xWd)
+
+    const toYLoc = (y) => toY( y, SCR_PAD, (minY * -1) , SCR_H ,cvHght )
+    const toXLoc = (x) => toX( x, SCR_PAD,SCR_W, data.length ) 
+    
+    var canvas = document.getElementById( "testCanvas" );  
+    var context = canvas.getContext( "2d" );   
+
+    context.clearRect( 0, 0, SCR_W + SCR_PAD*2, SCR_H  + SCR_PAD*2 );   
+
+    const drawXAxe = ( y ) => {
+        context.moveTo( SCR_PAD,  toYLoc(y) );  
+        context.lineTo( SCR_W +SCR_PAD ,   toYLoc(y) ); 
+        context.fillText( "" + y , 0 +TEXT_XOFS  , toYLoc(y) + TEXT_YOFS  );
+        context.fillText( "" + y , SCR_W + SCR_PAD  , toYLoc(y) + TEXT_YOFS  );    
+        return y;
+    } 
+
+    const drawYAxe = ( x ) => {
+        context.moveTo( SCR_PAD,  toYLoc(y) );  
+        context.lineTo( SCR_W +SCR_PAD ,   toYLoc(y) ); 
+        // context.fillText( "" + y , 0 +TEXT_XOFS  , toYLoc(y) + TEXT_YOFS  );
+        // context.fillText( "" + y , SCR_W + SCR_PAD  , toYLoc(y) + TEXT_YOFS  );    
+        return y;
+    } 
+
+
+    context.beginPath();   
+    context.strokeStyle = "#777";  
+    context.lineWidth = 1;
+    context.font = '10px arial';
+    context.fillStyle = "white";
+   
+    const foo = (tV) => 
+        (tV > Math.abs(maxY)) 
+            ? undefined   
+            : foo ( drawXAxe(tV) + AXY_GRADE)
+
+    foo(minY) ; 
+    context.stroke(); 
+
+
+    context.beginPath();   
+    context.strokeStyle = "#77f";  
+    context.lineWidth = 5;
+
+    data.forEach(
+            (e, i) => ( i ? (x,y)=>context.lineTo(x,y) : (x,y)=>context.moveTo (x,y) )(
+                toXLoc(i), 
+                toYLoc(e)   
+            )  
+    ) ;
+
+
+    //const Fix = (func) => func( Fix(func) )
+    
+
+
+    context.stroke();
+
+    context.beginPath();   
+    context.strokeStyle = "#F00";  
+    context.lineWidth = 2;
+
+    context.moveTo(  toXLoc(cyrTimesInd),  toYLoc(minY) );  
+    context.lineTo(  toXLoc(cyrTimesInd),  toYLoc(maxY) ); 
+    context.stroke();
+
+    context.beginPath();   
+    
+    context.font = '50px arial';
+    context.fillStyle = "#f77";
+    context.fillText( "" + data[cyrTimesInd] , toXLoc(cyrTimesInd) + 20  , toYLoc(data[cyrTimesInd])- 20 );    
+    context.stroke();
+  
+</script>    
