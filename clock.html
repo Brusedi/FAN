@@ -1,0 +1,194 @@
+<!doctype html>
+<html>
+<head>
+    <title>Our Funky HTML Page</title>
+</head>
+<style>
+    .cnt{
+        background-color: black;
+        /* height: 100px; */
+
+    }
+</style>
+
+<body>
+    
+    <div class = "cnt" >
+        <canvas id="testCanvas"   ></canvas> 
+        <canvas id="testCanvas1"  ></canvas> 
+        <canvas id="testCanvas1a"  ></canvas> 
+        <canvas id="testCanvas2"  ></canvas> 
+    </div>
+        <script>
+            //function f(e){ console.log(e);}
+            document.getElementById('testCanvas').addEventListener('click', 
+                (event)=>{
+                    console.log(event) 
+                    console.log( event.offsetX ) 
+                    console.log( event.offsetY ) 
+                }
+            
+            );
+
+    
+
+            function drawClock ( timeFunc, elementId , length, pad, hPad, mPad, sPad, grades, grLen, isShowRound, isShowSec, isArTail, clrDef, clrDef2 ){
+
+                const time  = timeFunc() ;
+                const hour = time.getHours() ; 
+                const min = time.getMinutes();  
+                const sec = time.getSeconds() ;
+            
+
+                //console.log("Show: "+ clrDef + clrDef2 );
+
+                const wth = (n) => n  < 1 ? 1 : n ;
+                const np = (l,m,f) => l * f( Math.PI*m/30); 
+                const xp = (l,m) => np( l, m, Math.sin );
+                const yp = (l,m) => - np( l, m, Math.cos );
+                const hr2mn = (h,m) => ((h>11?h-12:h)*60+m) / 12
+
+                const drawGrade = (ctx, m, cntr, bLen , eLen , width, clr ) => {
+                    ctx.beginPath();
+                    ctx.lineWidth = width ;
+                    ctx.strokeStyle = clr;
+                    ctx.moveTo( cntr + xp(bLen,m ) , cntr + yp(bLen, m) );  
+                    ctx.lineTo( cntr + xp(eLen,m ) , cntr + yp(eLen, m) ); 
+                    ctx.stroke();
+                }
+                const drawArrow = ( ctx, m, cntr, pad , width , clr ) => {
+                    drawGrade( ctx, m, cntr, 0 , cntr - pad, width, clr  );
+                    if(isArTail){
+                        drawGrade( ctx, (m>29 ? m-30 : m + 30), cntr, 0 , (cntr/2) - pad  , width, clr  );
+                    }    
+                }                    
+
+                const canvas = document.getElementById( elementId );  
+                const context = canvas.getContext( "2d" );  
+                context.lineCap = 'round'; 
+                context.clearRect( 0, 0, length, length );   
+                context.beginPath();
+
+                if(isShowRound){
+                    context.beginPath();
+                    context.lineWidth = length/15 ;
+                    context.strokeStyle = clrDef;
+                    context.arc(length/2, length/2, length/2 - pad, 0, 2 * Math.PI, false);
+                    context.stroke();
+                }    
+
+                [ 
+                    [min, mPad, wth(length/15)  ] , 
+                    [ hr2mn(hour, min), hPad, wth(length/12) ] 
+                ]
+                    .concat( isShowSec ? [[ sec, sPad , wth(length/100) ]] :[] ) 
+                    .forEach( 
+                        e => { 
+                                drawArrow (context, e[0]  ,length/2, e[1], e[2], clrDef) ;
+                                drawArrow (context, e[0]  ,length/2, e[1], wth(e[2]/3), clrDef2 ) ;
+                        }  
+                    ) ;
+
+                [...Array(grades).keys()]
+                    .map( x => x * 60/grades )
+                    .forEach( e =>  {
+                            drawGrade(context, e, length/2, length/2 - pad - grLen, length/2 - pad , wth(length/15) , clrDef); 
+                            drawGrade(context, e, length/2, length/2 - pad - grLen, length/2 - pad , wth(length/45) , clrDef2 );
+                        }
+                    );
+            }  
+            //----------------------------------------------------------------------------
+            const desSetColor = ( c1, c2 ) => (des) => ({ ...des, clr1:c1, clr2:c2 });
+            const desSetView  = ( grades, isShowRound, isShowSec, sArTail  ) => (des) => ({ ...des, grades:grades, isShowRound:isShowRound, isShowSec:isShowSec, sArTail:sArTail });
+            const desSetSizes = ( toPadF, toHourArrowPadF, toMinArrowPadF, toSecArrowPadF, toGadesLen ) => (des) =>
+                    ({ ...des, toPadF:toPadF, toHourArrowPadF:toHourArrowPadF, toMinArrowPadF:toMinArrowPadF, toSecArrowPadF:toSecArrowPadF, toGadesLen:toGadesLen });
+
+            const desColorsShemes = [ 
+                desSetColor('#afa', '#000'), 
+                desSetColor('#f00', '#f00'), 
+                desSetColor('#fff', '#fff'), 
+                desSetColor('#700', '#f55'), 
+                desSetColor('#400', '#fcc') 
+            ] ;                   
+            const desViewSchemes = [ 
+                desSetView(12,false, true, true), 
+                desSetView(0, true, true, false), 
+                desSetView(4, true, true, false), 
+                desSetView(12,true, true, false), 
+                desSetView(60,true, true, false), 
+            ] ;                   
+            const desSizeSchemes = [ 
+                desSetSizes( s => s/40, s => s/5, s => s/7, s => s/10, s => s/20 ),
+                desSetSizes( s => s/40, s => s/4, s => s/9, s => s/20, s => s/15 )
+            ]
+
+            drawDesign= ( size, timeFun, cnvId , des ) =>{
+                console.log(timeFun);
+                drawClock( 
+                    timeFun, cnvId, size,
+                    des?.toPadF(size) ??  size/40, 
+                    des?.toHourArrowPadF(size) ?? size/5, 
+                    des?.toMinArrowPadF(size) ?? size/7,
+                    des?.toSecArrowPadF(size) ?? size/10,
+                    des?.grades ?? 12,    
+                    des?.toGadesLen(size) ?? size/20,
+                    des?.isShowRound ?? false, 
+                    des?.isShowSec ?? true, 
+                    des?.sArTail ?? true,
+                    des?.clr1 ?? '#afa',
+                    des?.clr2 ?? '#000'
+                );
+            }    
+            
+            
+            const drawDesign1 = (size, timeFun, cnvId ) => drawClock( timeFun, cnvId, size, size/40, size/5,  size/7, size/10, 12 , size/20,  false, true, true, '#afa', '#000' );
+            const drawDesign2 = (size, timeFun, cnvId ) => drawClock( timeFun, cnvId, size, size/40, size/4,  size/9, size/20, 0 ,  size/15,  true, true, false, '#f00', '#f00'  );
+            const drawDesign2w = (size, timeFun, cnvId ) => drawClock( timeFun, cnvId, size, size/40, size/4,  size/9, size/20, 0 , size/15,  true, true, false, '#fff', '#fff' );
+            const drawDesign3 = (size, timeFun, cnvId ) => drawClock( timeFun, cnvId, size, size/40, size/4,  size/9, size/20, 12 , size/15,  true, true, false, '#700', '#f55' );
+
+            //setInterval( drawClock, 1000 , () => new Date(), "testCanvas", 400, 10, 60, 40, 25 , 12, 10, false, true, '#d00', '#f33' );
+            //setInterval( drawDesign2, 1000, 200, () => new Date(), "testCanvas" );
+        
+            const getTimeFoo = ( offset ) =>{
+                const getOffset = () =>{  
+                    const TIME_URI = "http://back.nvavia.ru/api/WebInstance/getTime" ; //"http://worldtimeapi.org/api/timezone/Asia/Yekaterinburg";
+                    const xmlHttp = new XMLHttpRequest();
+                    xmlHttp.open( "GET", TIME_URI, false ); 
+                    xmlHttp.send( null );
+                    xmlHttp.responseText;
+                    const data =  JSON.parse( xmlHttp.responseText )?.["datetime"];
+                    console.log("getting...")
+                    return  new Date(data) - new Date(); 
+                }              
+                //console.log( offset )       
+                return offset 
+                    ? ( () =>  new Date( new Date().getTime() + offset ) )
+                    : ( getTimeFoo( getOffset() ) ) ;  
+            }  
+
+            shemeRedseFunc =  (a,ef) => ({...a, ret: a.ret.concat( a.src.reduce( (a1,des) => a1.concat([ef(des)]),[]))})
+            const designes = [ desColorsShemes, desViewSchemes, desSizeSchemes ]
+                .reduce(
+                    (acc, es) => ({ src: es.reduce(  shemeRedseFunc , acc ).ret ,  ret: [] }),
+                    ({src:[{}],ret:[]})
+                ).src
+
+            //console.log( designes);        
+
+            const drawByIndex  = (size, timeFun, ind) => {
+                drawDesign( size, timeFun, "testCanvas" , designes[ind] );
+                setTimeout( drawByIndex, 1000, size, timeFun, ind +1 >= designes.length ? 0 : ind + 1 )
+            }    
+
+            drawByIndex( 200,  getTimeFoo(0) , 0 );
+
+            //setInterval( drawSomeDesign, 1000, 300, iter, getTimeFoo(0) ) ;   
+            //setInterval( drawDesign1, 1000, 300,  getTimeFoo(0), "testCanvas" );
+            // setInterval( drawDesign2, 1000, 50,  getTimeFoo(0), "testCanvas1" );
+            // setInterval( drawDesign2w, 1000, 50,  getTimeFoo(0), "testCanvas1a" );
+            // setInterval( drawDesign3, 1000, 50,  getTimeFoo(0), "testCanvas2" );
+
+        </script>
+    
+</body>
+</html>
