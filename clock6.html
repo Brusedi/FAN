@@ -1,0 +1,439 @@
+<!doctype html>
+<html>
+<head>
+    <title>Our Funky HTML Page</title>
+</head>
+<style>
+    .cnt{
+        background-color: black;
+        height: 400px; 
+
+    }
+</style>
+
+<body>
+    
+    <div class = "cnt" id = "cvDiv">
+        <canvas id="testCanvas" ></canvas>
+    </div>
+    <script>
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////
+        //comon function 
+        const id = x => x
+        const Y = f => ( h => h(h) ) ( g => f( x => g(g)(x) ) );
+        //const compose = (...fns) => x => fns.reduceRight((y, f) => f(y), x);
+        const pipe = (...fns) => x => fns.reduce((y, f) => f(y), x);
+        const addOrConcat = (a,b) => a.concat( Array.isArray(b) ? b : [b])  
+        const aConcat = (a1,a2) => a1.concat(a2)
+        const oSpred = (o1,o2) => ({ ...o1,...o2 })
+
+        //comon monad 
+        class Monad {
+            constructor(a) {
+                this.run = a; 
+            }
+            ret  = x => new Monad(x)
+            bnd  = fk => fk( this.run() )
+            map  = f => this.bnd( a =>  this.ret( f(a) )) ;
+            tap  = f => this.bnd( a =>  this.ret( f(a) ).map((_) => a)) ; // tap с эффектами
+            //tap  = f => ((x) =>  this )( this.map(f) ) ;                    // tap без эффектов
+            apl  = mf => this.map(  mf.run )
+        }
+
+        // reader monad 
+        class Reader extends Monad {
+            ret = x  => new Reader( (_) => x );
+            bnd = fk => new Reader( e => fk( this.run(e)).run(e) ); 
+            get = fe => this.bnd( x => new Reader( e => fe(e) )  );      
+        }  
+
+        // writer monad
+        class Writer extends Monad {
+            constructor(aw, mapend = x => x , mempty = '' ){
+                super(aw);
+                this.mapend = mapend;
+                this.mempty = mempty;
+            }
+            ret = (x) => new Writer( [x,this.mempty] , this.mapend, this.mempty )
+            bnd = fk => (nw => new Writer(   
+                     (nwr => [ nwr[0], this.mapend ( this.run[1], nwr[1]) ] )(nw.run), this.mapend , this.mempty  
+                    )) ( fk( this.run[0] ) )
+            put = fw => this.bnd( (x) => new Writer( [x, fw(x)], this.mapend, this.mempty  ) )
+        }
+
+        //State s a = State { runState :: s -> (a, s) } 
+        class State extends Monad {
+            constructor(as, mapend = (x,y) => x , mempty = '' ){
+                super(as);
+                this.mapend = mapend;
+                this.mempty = mempty;
+            }            
+            ret = (x) => new State( (_) =>  [ x, this.mempty ], this.mapend, this.mempty );
+            bnd = fk  => new State( e =>  (  
+                pipe(
+                    this.run,
+                    cyr => ({ cr:cyr, nw: fk( cyr[0]).run(e) }) ,
+                    ass => [ass.nw[0],  this.mapend( ass.cr[1], ass.nw[1]) ] 
+                )(e)
+            ), this.mapend, this.mempty )  
+            // bnd = fk  => new State( e =>  (     
+            //        (  ass => [ass.nw[0],  this.mapend(ass.cr[1],ass.nw[1])  ]     )  
+            //        ( ( cyr => ({ cr:cyr, nw: fk( cyr[0]).run(e) }) ) ( this.run(e) )) 
+            //     ) )
+
+            get = fe => new State( e => pipe( this.run, cyr => [ fe(cyr[1]) , cyr[1] ] ) (e) , this.mapend, this.mempty   )   
+
+            //this.ret( e=> [     ] )); 
+            //get = fe => this.bnd( x => new State( e => [fe(e),e], this.mapend, this.mempty )  ); 
+            put = fw => this.bnd( (x) => new State( (e) => [x, fw(x)], this.mapend, this.mempty  )  );
+            //map = f => this.bnd( a =>  this.ret( f(a) )) ;
+            //tap  = f => ((x) =>  this )( this.map(f) ) 
+            //tap  = f => this.bnd( a =>  this.ret( f(a) ).map((_) => a))                 
+        }
+
+        // Eather monad
+        class Eather extends Monad{
+            constructor(right, left = undefined ){
+                super(right);
+                this.lft = left;
+            }
+            ret = x => new Eather(x)
+            bnd = fk => this.lft === undefined ? fk(this.run) : this ;
+        }
+
+        // Try catch eather
+        class EatherTry extends Monad{
+            //static tryCatcher = f => { try { return new EatherTry( f() ) } catch (err) { console.log("er" );return new EatherTry( undefined, err) ; } }
+            constructor(right, left = undefined ){
+                super(right);
+                this.lft = left;                
+            }
+            ret = x => new EatherTry(x)
+            bnd = fk => { 
+                try {  return this.lft !== undefined ? this : fk(this.run) } 
+                catch (err) { return new EatherTry( undefined, err) }   
+            }
+            tap  = f => this.bnd( a =>  this.ret( f(a) ).map((_) => a)) ; // tap с эффектами
+            runOrDef = (defVal) => this.lft === undefined ? this.run : defVal 
+            runOrLft = () => this.lft === undefined ? this.run : this.lft 
+        } 
+
+        
+        ////////////////////////////////////////////////////////
+        // Monad functions
+        const httpGetAsJsonE = (theUrl) => new EatherTry(new XMLHttpRequest())
+            .tap( x=> x.open( "GET", theUrl, false ))
+            .tap( x=> x.send( null ))
+            .map( x=>JSON.parse(x.responseText))
+
+        // разность двух дат без учета часового пояса    
+        const getOfset=( dateStr, d2) => 
+            new Date( dateStr.substr(0,19)).getTime() - d2.getTime();
+      
+        const safeGetOfsetE = (theUrl, prop) =>
+        {
+            const ret = httpGetAsJsonE(theUrl)
+                .map( x => x[prop] )
+                .map( x => getOfset(x, new Date() ) )
+                .runOrDef(10)
+            console.log(ret);                
+            return ret ;                
+        }                
+        // 
+        const getTimeByUriFun = (theUrl, prop) => ( offset ) =>  
+            offset 
+                ? ( () =>  new Date( new Date().getTime() + offset ) )       
+                : getTimeByUriFun( theUrl, prop ) ( safeGetOfsetE(theUrl,prop) )     
+
+        ///COMMON DRAW WRITERS
+
+        //const newDrawWriter = () 
+
+        const drawPathByFuncW = ( drwFronCtxFnc ) => new Writer( [ drwFronCtxFnc, []], addOrConcat, [] )
+            .put( _ => c => c.beginPath()).put( id ).put( _ => c => c.stroke())
+
+        const drawPathFuncW = ( pntsPairs) => 
+            drawPathByFuncW( pntsPairs.map( (v,i) => ( c => ( i==0 ? c.moveTo(v[0],v[1]) : c.lineTo(v[0],v[1]) )) )  )
+
+
+        // const drawPathFuncW = ( pointPairs ) => new Writer( [ pointPairs, []], addOrConcat, [] )
+        //     .put( _ => c => c.beginPath())
+        //     .put( points => points.map( (v,i) => ( c => ( i==0 ? c.moveTo(v[0],v[1]) : c.lineTo(v[0],v[1]) )) )) 
+        //     .put( _ => c => c.stroke())
+        
+        const drawStrokeStyleW = (clr, wdh = undefined, lCap = undefined) => new Writer( [ undefined , []], addOrConcat, [] ) 
+            .put( _ => clr ? c => c.strokeStyle = clr : [] )
+            .put( _ => wdh ? c => c.lineWidth = wdh : [] )
+            .put( _ => lCap ? c => c.lineCap = lCap : [] )
+
+        const drawStrokeTextW = ( text, x, y , isOutl = false ) => new Writer( [ undefined, []], addOrConcat, [] )
+            .put( _ => isOutl ? c => c.strokeText(text, x, y ) : [] )
+            .put( _ => c => c.fillText( text, x, y ) )
+
+        const drawStrokeTxtStyleW = (size, clr , isOutl = false) => new Writer( [ undefined , []], addOrConcat, [] ) 
+            .put( _ => c => c.font = size.toString() + 'px arial')
+            .put( _ => c => c.fillStyle = clr)
+            .put( _ => isOutl ? [c => c.strokeStyle = 'white' , c => c.lineWidth = 5 ] : [] )
+
+        const drawTxtW = (text, x, y, size, clr , isOutl = false) => drawStrokeTxtStyleW(size,clr,isOutl)
+            .bnd(  _ => drawStrokeTextW(text, x, y , isOutl) )
+        
+        const draw = (ctx, drawsFuncs ) => drawsFuncs.forEach( dr => dr(ctx) )     
+
+
+        //////////////////////////////////////////////////////////
+        // State builder
+        const initState = ({
+            canvasId:"testCanvas",
+            sizeDivId:"cvDiv",
+            url:"http://back.nvavia.ru/api/webinstance/gettime",
+            PROP_TM:"datetime",
+            wth:{
+                url:"https://api.open-meteo.com/v1/forecast?latitude=60.95&longitude=76.50&hourly=temperature_2m&timezone=auto",
+                PROP_HR:'hourly',
+                PROP_TH:'temperature_2m',
+                PROP_TM:"time",
+                clientPad:15,
+                axTxtClr:'#fff',
+                axYGrade:5,
+                grphClr:'#99f',
+                grphWidth:3,
+                tColor:'#e00',
+                xAxeColor:"#0f0",
+                xAxeWidth:1,
+                sundayClr:"Red",
+                cyrAxeWidth:3,
+                tmpTxtSize:50
+            },
+            clc:{
+                grades: 12,
+                isShowRound:true, 
+                isShowSec:true, 
+                isArrTail:true, 
+                lineCap:"round",
+                color1:"#f00", 
+                color2:"#f55"
+            }
+        });
+
+        // Main func state builder
+        const stateCommonInitializationS = new State( st => [ undefined , st ] , (o1,o2) => ({ ...o1,...o2 }), ({}) )
+            .get( state => getTimeByUriFun(state.url, state.PROP_TM)(0) ) 
+            .put( x => ({ time:x() , timefunc:x }) )
+            .get( state => [ document.getElementById( state.canvasId ), document.getElementById( state.sizeDivId )] ) 
+            .tap( x => x[0].width = x[1].clientWidth ) 
+            .tap( x => x[0].height = x[1].clientHeight )
+            .put( x => ({ width:x[0].width, height:x[0].height, ctx:  x[0].getContext( "2d" )  }) )
+            .get( state => drawWeather( state.wth, state.ctx, state.width-state.height, state.height,  0 ,  0 ) ) 
+            .get( state => drawClock( state.clc, state.ctx, state.time, state.height, state.height, state.width-state.height ,  0 ) ) 
+
+        /// WEATHER BOX //////////////////////////////////////////////////////////////////
+        const stateInitWthLayout = (state) => ({
+            clWidth:  state.width - state.clientPad*2, 
+            clHeight: state.height - state.clientPad*2,
+            cyrTimesInd: state.days.reduce( (ac,v,i) =>  new Date(v) <  new Date() ? i : ac , 0  ),
+            minY: (Math.floor( Math.min( ...(state.data) )/5)) * 5,
+            maxY: (Math.floor( Math.max( ...(state.data) )/5)+1) * 5, 
+            toX: (x) => state.xofst + state.clientPad + x ,
+            toY: (y) => state.height - ( state.yofst + state.clientPad + y ) ,
+        });
+
+        const stateInitWthLayoutBis = (state) => ({            
+            toXYs:  (pss) =>  pss.map((ps) => [state.toX(ps[0]), state.toY(ps[1])]),
+            tmpToY: (tmp) => (tmp - state.minY) * state.clHeight / Math.abs(state.maxY-state.minY) ,
+            idxToX: (idx) =>  idx * state.clWidth / state.data.length ,
+            //tmpHeight: Math.abs(state.maxY-state.minY),
+            isTmpDispAbove: state.data[state.cyrTimesInd] > (state.minY+state.maxY)/2,
+        });
+
+        // state full init 
+        const stateInitAllS = (ctx, data, wdh, hgh, ofsX, ofsY) =>  new State( 
+                initState => [({ctx:ctx, width:wdh, height:hgh, xofst:ofsX, yofst:ofsY, data:data[initState.PROP_TH], days:data[initState.PROP_TM] }), initState] , 
+                oSpred, ({}) 
+            ).put( id )
+            .get( stateInitWthLayout ).put(id)
+            .get( stateInitWthLayoutBis ).put(id)
+
+ 
+        // draw f
+        const drawWthPathClientW = ( state, pointPairs, wth, clr ) => drawStrokeStyleW( clr, wth )
+                .bnd( _ => drawPathFuncW(  state.toXYs( pointPairs ) ) )
+
+        const drawWthXAxeW = (state, y ) => drawWthPathClientW( state, [[0, y],[state.clWidth, y]], state.xAxeWidth, state.xAxeColor );
+
+        const drawWthYAxeW = (state, x , wth, clr  ) => drawWthPathClientW( state, [[ x, 0 ],[ x, state.clHeight ]], wth, clr   );
+
+        const drawWthXAxeTxtW = (state, tmp ) =>  drawWthXAxeW(state, state.tmpToY(tmp) )
+            .bnd(x=>drawTxtW(tmp, state.toX(-state.clientPad), state.toY(state.tmpToY(tmp)-(state.clientPad-6)/2), state.clientPad-4, state.axTxtClr))
+            .bnd(x=>drawTxtW(tmp, state.toX( state.clWidth),   state.toY(state.tmpToY(tmp)-(state.clientPad-6)/2), state.clientPad-4, state.axTxtClr))
+
+        const drawWthXAxesW = (state) =>  
+            (Y( g => wm =>  wm.run[0] > state.maxY ? wm : g(  wm.bnd( t => drawWthXAxeTxtW( state , t ).map((_) => t + state.axYGrade) ) ) ))
+                ( new Writer( [state.minY,[]], aConcat , [] ) )  
+
+        const dateToStr = (d) => d.getDate()+" "+("ЯнвФврМарАпрМайИюнИюлАвгСенОктНояДек".substr( (d.getMonth()-1)*3 ,3))
+        const wdayToStr = (d) => "ВсПнВтСрЧтПтСб".substr(d.getDay()*2, 2 )
+
+        const getNewDayIndexes = (dys) => 
+            dys.reduce((a,e,i)=>pipe(()=>new Date(e).getDate(),(d=>d==a[0]?a:[d,a[1].concat([i])]))(),[new Date(dys[0]).getDate(),[]])[1];
+      
+
+        const drawWthYAxesW = (state) => getNewDayIndexes(state.days)
+            .reduce(           
+                (ac,di) => ac.bnd( _ => 
+                    drawWthYAxeW( state , state.idxToX(di), state.xAxeWidth, state.xAxeColor) 
+                        .bnd( x=>drawTxtW( 
+                            dateToStr(new Date(state.days[di])), state.toX(state.idxToX(di)), state.toY(-state.clientPad+3), state.clientPad -4, state.axTxtClr
+                        ))
+                        .bnd( x=>drawTxtW( 
+                            wdayToStr(new Date(state.days[di])), state.toX(state.idxToX(di)), state.toY( state.clHeight+3), state.clientPad -4
+                            , new Date(state.days[di]).getDay() ? state.axTxtClr : state.sundayClr
+                        ))) 
+                , new Writer( [ undefined , []], addOrConcat, [] ) 
+            ).bnd( _ => drawWthYAxeW( state , state.idxToX(state.cyrTimesInd), state.cyrAxeWidth, state.sundayClr )  )
+
+
+          
+        const drawWthTmpW = (state) => 
+            drawTxtW(
+                state.data[state.cyrTimesInd]+"°",
+                state.toX( state.idxToX(state.cyrTimesInd) + state.clientPad),
+                state.toX(  state.isTmpDispAbov 
+                                ? state.tmpToY( state.data[state.cyrTimesInd]) - (state.tmpTxtSize )
+                                : state.tmpToY( state.data[state.cyrTimesInd])  ) ,
+                state.tmpTxtSize, state.sundayClr, true )
+
+        const drawWthGraphW = ( state ) => drawWthPathClientW(state, state.data.map((t,i) => [state.idxToX(i), state.tmpToY(t)]), state.grphWidth, state.grphClr )
+
+        const drawWthAllW = (state) => 
+            drawWthXAxesW(state)
+                .bnd( _ => drawWthGraphW(state) )
+                .bnd( _ => drawWthYAxesW(state) )
+                .bnd( _ => drawWthTmpW(state) )
+
+        // Main draw Weather Box func 
+        const drawWeather = (wthState, ctx, wdh, hgh, ofsX, ofsY ) => console.log(
+
+            new EatherTry(wthState )
+                .bnd( state => httpGetAsJsonE(state.url).map( d => ({initState:state, data:d[state.PROP_HR]  })) )
+                .map( stDt => stateInitAllS( ctx, stDt.data, wdh, hgh, ofsX, ofsY )
+                                .get( state => draw( state.ctx, drawWthAllW(state).run[1] ) )
+                                .run(stDt.initState )
+                )
+                .runOrLft()
+        )                
+
+
+        
+        /////DRAW CLOCK
+        const stateInitClcLayout = ( state ) => ({
+            clientPad: state.width/15,          //?? 15,
+            hArrPad:state.width/5,              //?? 15,
+            mArrPad:state.width/10,             //?? 15,
+            sArrPad:state.width/15,             //?? 15,
+            gradeLen: state.width/15,          // ?? 15, 
+        });
+
+        // Init Clock helper funs  to state
+        const stateInitClcTools = (state) => ({
+            toX: (x) =>    state.xofst + state.clientPad + x ,
+            toY: (y) =>  ( state.yofst + state.clientPad + y ) ,
+            wth: (n) => n  < 1 ? 1 : n ,
+            xp: (l,m) => l * Math.sin( Math.PI*m/30), 
+            yp: (l,m) => - l * Math.cos( Math.PI*m/30), 
+            hr2mn: (h,m) => ((h>11?h-12:h)*60+m) / 12 , 
+        })
+
+        const stateInitClcToolsBis = (state) => ({
+            toXYs: (pss) => pss.map((ps) => [state.toX(ps[0]), state.toY(ps[1])]),
+        })
+
+        // funcs
+        const drawClcRoundW = ( state, clr, wth ) => drawStrokeStyleW( clr, wth )
+            .bnd( _ => drawPathByFuncW( 
+                cx => cx.arc( 
+                    state.toX( state.width/2-state.clientPad ), 
+                    state.toY( state.width/2-state.clientPad ), 
+                    state.width/2-state.clientPad , 0, 2 * Math.PI, false
+            )))
+           
+        const drawTwiceW = ( fwrt, state, clr1, clr2, wth1, wth2 = undefined ) => fwrt( state, clr1, wth1 ).bnd( _ => fwrt( state, clr2, wth2 ?? wth1/3 ) )
+
+        const drawClcRound2W = ( state ) => drawTwiceW( drawClcRoundW, state, state.color1, state.color2, state.width/15 )
+        //const drawClcRound2W = ( state ) => drawClcRoundW( state, state.width/15, state.color1) 
+        //        .bnd( _ => drawClcRoundW( state, state.width/45, state.color2 )  )
+        
+              
+
+        const drawClcGradeW = ( state, ang, bLen, eLen, wth, clr ) => drawStrokeStyleW( clr, wth, state.lineCap  )
+            .bnd( _ => 
+                pipe( 
+                    (cntr) => [ [cntr + state.xp(bLen,ang ), cntr + state.yp(bLen, ang)],[cntr + state.xp(eLen,ang ), cntr + state.yp(eLen, ang)] ],
+                    state.toXYs,
+                    drawPathFuncW 
+                )(state.width/2 -  state.clientPad)
+            )    
+
+        const drawClcGrade2W = ( state, ang, bLen, eLen ) => 
+            drawTwiceW( (s,c,w) => drawClcGradeW(s, ang, bLen, eLen, w, c) , state, state.color1, state.color2, state.width/15 ) 
+        //const drawClcGrade2W = (state, ang, bLen, eLen ) => drawClcGradeW( state, ang, bLen, eLen, state.width/15, state.color1 ) 
+        //        .bnd( _ => drawClcGradeW( state, ang, bLen, eLen, state.width/45, state.color2 )  )
+
+                
+
+        // todo Y        
+        const drawClcGradesW = (state) => 
+            [...Array(state.grades).keys()].map( x => x * 60/state.grades )
+                .reduce( 
+                    (writer,ang) => writer.bnd( _=>
+                         drawClcGrade2W(state, ang, state.width/2 - state.clientPad - state.gradeLen,state.width/2 - state.clientPad )
+                    )     
+                    , new Writer([ undefined ,[]] , addOrConcat, [] )
+                );  
+
+        const drawClcArrowW = (state, ang, pad, width, clr ) => 
+            drawClcGradeW(state , ang ,  0 , state.width/2 - pad , width, clr )
+                .bnd( _ => state.isArrTail 
+                    ? drawClcGradeW(state, (ang>29?ang-30:ang+30), state.width/4 - pad, 0, width, clr)  
+                    : new Writer([ undefined ,[]] , addOrConcat, [] )
+                )
+    
+
+        const drawClcArrow2W = ( state, ang, pad, width) => 
+            drawClcArrowW(state, ang, pad, width, state.color1)
+                .bnd( _ => drawClcArrowW(state, ang, pad, width/3, state.color2) )
+
+        const drawClcArrowsW = (state) => 
+            drawClcArrow2W(state, state.hr2mn(state.time.getHours(),state.time.getMinutes()) , state.hArrPad , state.width/15 ) 
+                .bnd( _ =>  drawClcArrow2W(state, state.time.getMinutes() , state.mArrPad , state.width/20 )  )
+                .bnd( _ =>  state.isShowSec 
+                    ? drawClcArrow2W(state, state.time.getSeconds() , state.sArrPad , state.width/60 ) 
+                    : new Writer([ undefined ,[]] , addOrConcat, [] )
+                )                      
+
+                      
+        // Main draw Clock Box func 
+        const drawClock = (clcState, ctx, tme, wdh, hgh, ofsX, ofsY ) => 
+        console.log(
+            new EatherTry(clcState )
+            .tap( x=> console.log(x) )
+            .map(  state => 
+                    new State( st => [ [ctx, wdh, hgh, ofsX, ofsY] , st ] , (o1,o2) => ({ ...o1,...o2 }), ({}) ) 
+                        .put( x => ({ time:tme, ctx:ctx, width:x[1], height:x[2], xofst:x[3], yofst:x[4] }) )
+                        .get( state => stateInitClcLayout(state)).put(id)
+                        .get( state => stateInitClcTools(state)).put(id)
+                        .get( state => stateInitClcToolsBis(state)).put(id) 
+                        .get( state => draw( state.ctx, drawClcRound2W(state).run[1] ) ) 
+                        .get( state => draw( state.ctx, drawClcGradesW(state).run[1] ) ) 
+                        .get( state => draw( state.ctx, drawClcArrowsW(state).run[1] ) ) 
+                        .run( state )
+            )
+            .runOrLft()
+        )
+
+        console.log( stateCommonInitializationS.run(initState )  )    ;
+
+    </script>
+</body>
+</html>   
