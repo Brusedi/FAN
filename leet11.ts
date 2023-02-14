@@ -10,10 +10,11 @@ const descs:desc[] = [
     { char:"D" , val:500, gChar:"CD",  grade:900  }, 
     { char:"M" , val:1000, gChar:"CM",  grade:4000  }, 
 ] 
-const dd = 
+const dd:{ [id: string]: number; } = 
 {
     ["I"]:1,
     ["IV"]:4,
+    ["V"]:5,
     ["IX"]:9,
     ["X"]:10,
     ["XL"]:40,
@@ -26,10 +27,22 @@ const dd =
     ["M"]:1000,
 }
 
-function romanToInt(s: string): number {
-    s.split('').reduce( (ac,x) => ( ac.p ? dd[(x + ac.p)]        : ({ p:x ,ret:ac.ret}) ) , ({p:"",ret:0}) )
+const romanToInt = (s: string): number =>
+    ( x => x.prev ? x.ret + dd[x.prev] : x.ret )
+    ( s.split('')
+        .reduce( 
+            (ac,x) => { console.log( `-> ${ x }   ${ ac.prev + x }  ${ dd[ ac.prev + x] } / ${ ac.prev }  ${ dd[ ac.prev ] } ret: ${ ac.ret } ` ) ; return ( 
+                !!ac.prev 
+                ?  dd.hasOwnProperty( ac.prev + x  ) 
+                    ? ({ prev:"", ret:ac.ret + dd[ ac.prev + x ] })
+                    : ({ prev:x , ret:ac.ret + dd[ ac.prev ]   })         
+                : ({ prev:x ,ret:ac.ret}) ) } 
+                , ({prev:"",ret:0}) 
+    ))
+;
 
-};
+(["LVIII"] ).reduce( ( ac , x ) => { console.log(` ${x}, ${ romanToInt( x )} `) ;  return ""  } ,  "" ) //console.log( ` ${x}, ${ romanToInt( x )} ` ) //"III", "IV" , "MCMXCIV" , 
+
 
 // function intToRoman(num: number):string {
 //     const repeat = ( ac:string , n:number ):string  => n < 1 ? '' : n < 2 ? ac : n < 3 ? ac+ac : n < 4 ? ac+ac+ac : n < 5 ? ac + ac + ac + ac : " "  
@@ -50,6 +63,7 @@ function romanToInt(s: string): number {
 //     }
 //     return ret
 //  };
+
 
 //  for(let i = 1; i<500; i++) {
 //     console.log( `${intToRoman(i)} ${i}  `)
