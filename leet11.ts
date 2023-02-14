@@ -27,6 +27,7 @@ const dd:{ [id: string]: number; } =
     ["M"]:1000,
 }
 
+
 const romanToInt = (s: string): number =>
     ( x => x.prev ? x.ret + dd[x.prev] : x.ret )
     ( s.split('')
